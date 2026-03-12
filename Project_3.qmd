@@ -1,0 +1,19 @@
+---
+title: "DATA 607: Project 3"
+author: "Desiree Thomas, Denise Atherley, Kiera Griffiths"
+format: html
+editor: visual
+---
+
+## Approach
+
+For Project 3, we (Desiree Thomas, Denise Atherley, and Kiera Griffiths) will be using GitHub and Slack for our primary communication. GitHub will be the host for our shared repo and we will be using GitHib Proects to track issues, manage our workflow, assign tasks to specific members and track their completion. We will use Slack to coordinate meetings and Teams for video calls/stand ups. GitHub issues may be used for handling bugs and errors. We have created a README.md for documentation as well. Our data source is from Kaggle, which is the Data Science Job Postings with Salaries 2025:  https://www.kaggle.com/datasets/elahehgolrokh/data-science-job-postings-with-salaries-2025
+
+An Entity-Relationship (ER) diagram will be produced to document this design, illustrating how entities like job titles, salary metrics, and company sizes relate to one another.
+
+Logical model for normalized database: ? 
+
+How we will load the data: Data Migration: We will load the CSV into the database. We can use the DBI and RPostgres libraries. We can then use a function to send the cleaned and normalized databases into SQL tables. Hopefully, we can successfully store our database in the cloud which will allow our team to connect to it. We will pull only the data that we need for our analysis. 
+
+For the ER design, we can use resources such as draw.io, Excalidraw or Lucidchart.  
+
