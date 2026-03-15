@@ -5,15 +5,62 @@ format: html
 editor: visual
 ---
 
-## Approach
+## Approach -
 
-For Project 3, we (Desiree Thomas, Denise Atherley, and Kiera Griffiths) will be using GitHub and Slack for our primary communication. GitHub will be the host for our shared repo and we will be using GitHib Proects to track issues, manage our workflow, assign tasks to specific members and track their completion. We will use Slack to coordinate meetings and Teams for video calls/stand ups. GitHub issues may be used for handling bugs and errors. We have created a README.md for documentation as well. Our data source is from Kaggle, which is the Data Science Job Postings with Salaries 2025:  https://www.kaggle.com/datasets/elahehgolrokh/data-science-job-postings-with-salaries-2025
+This project is meant to explore the question, "**Which data science skills are most valued?**" in a collaborative process with a group of our choosing. The goal is to work effectively as a team to perform an exploratory analysis to answer this question. Because we've had experience working together in a past assignment and noticed that we collaborate pretty well, we (*Desiree Thomas, Denise Atherley and Kiera Griffiths*) decided to work together for this Project as well. We plan to fulfill the various project requirements by breaking down each key deliverable.
 
-An Entity-Relationship (ER) diagram will be produced to document this design, illustrating how entities like job titles, salary metrics, and company sizes relate to one another.
+### Collaboration:
 
-Logical model for normalized database: ? 
+We will be using GitHub and Slack for our primary communication. GitHub will be the host for our shared repository and we will be using GitHub Projects to track issues, manage our workflow, assign tasks to specific members and track their completion. We will use Slack to coordinate meetings and Teams for video calls. GitHub issues may be used for handling bugs and errors. We have created a README.md for documentation as well.
 
-How we will load the data: Data Migration: We will load the CSV into the database. We can use the DBI and RPostgres libraries. We can then use a function to send the cleaned and normalized databases into SQL tables. Hopefully, we can successfully store our database in the cloud which will allow our team to connect to it. We will pull only the data that we need for our analysis. 
+### Data Acquisition:
 
-For the ER design, we can use resources such as draw.io, Excalidraw or Lucidchart.  
+To acquire a relevant data source, we used the assistance of LLM Google Gemini to suggest some data sources that could highlight which data science skills are most valued. Various options were suggested but we ultimately chose a data source from Kaggle titled, "[Data Science Job Postings with Salaries 2025](https://www.kaggle.com/datasets/elahehgolrokh/data-science-job-postings-with-salaries-2025)", which appeared to be the most compelling. The data is a processed version of scraped data collected in 2025 with transformations made to respect company privacy and avoid redistribution of raw proprietary content.
 
+**Logical model for normalized database:**
+
+To design a normalized relational schema, we will breakdown the Data Science Job Postings table into four interconnected tables.
+
+-   **companies Table:** Stores unique information about each company.
+
+    -   company_id (Primary Key)
+
+    -   company_name (from the company column)
+
+    -   headquarter, industry, ownership, company_size, revenue
+
+-   **jobs Table:** Stores the specific job postings and links to the company.
+
+    -   job_id (Primary Key)
+
+    -   company_id (Foreign Key -\>companies.company_id)
+
+    -   job_title, seniority_level, status, location, post_date, salary
+
+-   **skills Table:** Stores a unique list of all possible skills.
+
+    -   skill_id (Primary Key)
+
+    -   skill_name
+
+-   **job_skills Table:** A mapping (bridge) table to handle the many-to-many relationship between jobs and skills (since a job requires multiple skills, and a skill is required by multiple jobs).
+
+    -   job_id (Foreign Key -\> jobs.job_id)
+
+    -   skill_id (Foreign Key -\> skills.skill_id)
+
+An Entity-Relationship (ER) diagram will be produced to document this design, illustrating how entities relate to one another. We can use resources such as draw.io, Excalidraw or Lucidchart.
+
+**How we will load the data:**
+
+We will load the .csv file into a database, most likely SQLite, and use SQL code to generate our structured tables with the appropriate primary keys so that we can link them.
+
+Once the relational database is established, we can use the DBI, RSQLite and tidyverse libraries to perform all data tidying, transformations and exploratory data analysis in R. Hopefully, we can successfully store our database in the cloud which will allow our team to connect to it. We will pull only the data that we need for our analysis and address any data quality issues like missing data and outliers that deviate from the standard format.
+
+### Analysis strategy:
+
+In order to answer the question of which data science skills are most valued, we will likely analyze the data through two main lenses:
+
+-   Market demand - what percentage of job postings require the specific skill?
+
+-   Salary to skill correlation - which skills have the strongest positive correlation with the higher salary ranges.
