@@ -64,3 +64,157 @@ In order to answer the question of which data science skills are most valued, we
 -   Market demand - what percentage of job postings require the specific skill?
 
 -   Salary to skill correlation - which skills have the strongest positive correlation with the higher salary ranges.
+
+
+
+```{r}
+library(tidyverse)
+library(janitor)
+library(lubridate)
+library(DBI)
+library(RSQLite)
+library(ggplot2)
+
+# Load raw data and standardize headers
+url <- "https://raw.githubusercontent.com/desithomas/607-Project-3/refs/heads/main/data_science_job_posts_2025.csv"
+
+job_posts_raw <- read_csv(url) %>% 
+  clean_names()
+```
+
+
+
+```{r}
+job_posts_tidy <- job_posts_raw %>%
+  # 1. Create the ID first
+  mutate(job_id = row_number()) %>% 
+  # 2. Clean the messy symbols
+  mutate(salary_numeric = parse_number(salary)) %>%
+  mutate(skills_clean = str_remove_all(skills, "[\\[\\]']")) %>%
+  # 3. Filter out rows that are too messy to analyze
+  drop_na(salary_numeric, skills_clean)
+
+
+```
+
+
+```{r}
+jobs_table <- job_posts_tidy %>%
+  select(job_id, job_title, salary_numeric, location)
+
+skills_bridge <- jobs_tidy %>%
+  select(job_id, skills_clean) %>%
+  separate_rows(skills_clean, sep = ",\\s*")
+```
+
+```{r}
+# Table A: Companies (Unique entities)
+companies <- job_posts_tidy %>%
+  select(company, headquarter, industry, company_size, revenue) %>%
+  distinct(company, .keep_all = TRUE) %>% 
+  mutate(company_id = row_number())
+
+# Table B: Jobs Table (The Fact Table)
+jobs_table <- job_posts_tidy %>%
+  left_join(companies, by = "company") %>%
+  select(job_id, job_title, salary_numeric, location, post_date_dt, company_id)
+
+# Table C: Skills Bridge (Atomic data for analysis)
+# This turns ['python', 'r'] into individual rows
+skills_bridge <- job_posts_tidy %>%
+  separate_rows(skills_clean, sep = ",\\s*") %>%
+  mutate(skill_name = str_to_lower(str_trim(skills_clean))) %>%
+  filter(skill_name != "") %>%
+  mutate(skill_id = as.numeric(as.factor(skill_name))) %>%
+  select(job_id, skill_id, skill_name)
+
+# Table D: Skills Lookup (The Dictionary)
+skills_lookup <- skills_bridge %>%
+  select(skill_id, skill_name) %>%
+  distinct()
+```
+
+
+```{r}
+# 1. Create/Connect to the SQLite database file
+con <- dbConnect(SQLite(), "ds_job_posts.db")
+
+# 2. Write the four tables to the database
+dbWriteTable(con, "companies", companies, overwrite = TRUE)
+dbWriteTable(con, "jobs", jobs_table, overwrite = TRUE)
+dbWriteTable(con, "skills_lookup", skills_lookup, overwrite = TRUE)
+dbWriteTable(con, "job_skills_bridge", skills_bridge %>% select(job_id, skill_id), overwrite = TRUE)
+
+# 3. Downstream Analysis: Querying "Value"
+# We join the bridge to the jobs table to get the salary for each skill instance
+final_analysis <- skills_bridge %>%
+  left_join(jobs_table, by = "job_id") %>%
+  group_by(skill_name) %>%
+  summarise(
+    demand = n(),
+    avg_salary = round(mean(salary_numeric, na.rm = TRUE))
+  ) %>%
+  arrange(desc(avg_salary))
+
+# Run a SQL query to check the cleaned salary
+dbGetQuery(con, "SELECT job_title, salary_numeric FROM jobs LIMIT 10")
+
+# Close connection
+dbDisconnect(con)
+```
+
+```{r}
+# Joining the Salary data to the Skills data
+skill_valuation <- skills_bridge %>%
+  # Bring in salary_numeric from the jobs_table
+  left_join(jobs_table, by = "job_id") %>%
+  
+  # Group by each unique skill
+  group_by(skill_name) %>%
+  
+  # Calculate Frequency (Demand) and Mean Salary (Value)
+  summarise(
+    demand_count = n(),
+    avg_salary = round(mean(salary_numeric, na.rm = TRUE), 0)
+  ) %>%
+  
+  # Sort by highest salary to see the most "Valued" skills
+  arrange(desc(avg_salary))
+
+# View the top 10 results
+head(skill_valuation, 10)
+```
+
+
+```{r}
+
+# Create the Value vs. Demand plot
+ggplot(skill_valuation %>% filter(demand_count > 5), 
+       aes(x = demand_count, y = avg_salary, label = skill_name)) +
+  
+  # Add the points
+  geom_point(color = "darkgreen", size = 3, alpha = 0.7) +
+  
+  # Add text labels to the points (avoids overlapping)
+  geom_text(vjust = -1, check_overlap = TRUE, size = 3) +
+  
+  # Format the Y-axis as currency
+  scale_y_continuous(labels = scales::dollar_format()) +
+  
+  # Add professional titles
+  labs(title = "Data Science Skills: Value vs. Demand (2025)",
+       subtitle = "High-Value skills are at the top; High-Demand skills are to the right",
+       x = "Demand (Number of Job Postings)",
+       y = "Average Salary (Market Value)",
+       caption = "Source: Project 3 Normalized SQLite Database") +
+  
+  theme_minimal()
+```
+
+
+
+
+
+
+
+
