@@ -91,7 +91,9 @@ job_posts_tidy <- job_posts_raw %>%
   # 2. Clean the messy symbols
   mutate(salary_numeric = parse_number(salary)) %>%
   mutate(skills_clean = str_remove_all(skills, "[\\[\\]']")) %>%
-  # 3. Filter out rows that are too messy to analyze
+  # 3. Convert text into calculable dates
+  mutate(post_date_dt = today() - days(as.numeric(str_extract(post_date, "\\d+")))) %>%
+  # 4. Filter out rows that are too messy to analyze
   drop_na(salary_numeric, skills_clean)
 
 
