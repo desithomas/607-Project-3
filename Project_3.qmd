@@ -104,7 +104,7 @@ job_posts_tidy <- job_posts_raw %>%
 jobs_table <- job_posts_tidy %>%
   select(job_id, job_title, salary_numeric, location)
 
-skills_bridge <- jobs_tidy %>%
+skills_bridge <- job_posts_tidy %>%
   select(job_id, skills_clean) %>%
   separate_rows(skills_clean, sep = ",\\s*")
 ```
