@@ -64,3 +64,172 @@ In order to answer the question of which data science skills are most valued, we
 -   Market demand - what percentage of job postings require the specific skill?
 
 -   Salary to skill correlation - which skills have the strongest positive correlation with the higher salary ranges.
+
+## Data Transformation:
+
+```{r}
+
+#chunk 1 
+library(tidyverse)
+library(janitor)
+library(lubridate)
+library(DBI)
+library(RSQLite)
+library(ggplot2)
+library(scales)
+
+# Load raw data and standardize headers
+url <- "https://raw.githubusercontent.com/desithomas/607-Project-3/refs/heads/main/data_science_job_posts_2025.csv"
+
+job_posts_raw <- read_csv(url) %>% 
+  clean_names()
+```
+
+```{r}
+
+
+# meets the requirement to tidy the data using R
+job_posts_tidy <- job_posts_raw %>%
+  # Create the ID first
+  mutate(job_id = row_number()) %>% 
+  mutate(
+    # Use str_extract_all to pull in the entire salary range
+    salary_extract = str_extract_all(salary, "\\d+,?\\d*"),
+    salary_numeric = map_dbl(salary_extract, ~{
+      nums <- as.numeric(str_replace_all(.x, ",", ""))
+      if(length(nums) > 0) mean(nums) else NA_real_
+    })
+  ) %>%
+  mutate(skills_clean = str_remove_all(skills, "[\\[\\]']")) %>%
+  mutate(post_date_dt = today() - days(as.numeric(str_extract(post_date, "\\d+")))) %>%
+  drop_na(salary_numeric, skills_clean) %>%
+  select(-salary_extract)
+```
+
+```{r}
+# normalizing the database
+
+# Table A: Companies (Unique entities) 
+companies <- job_posts_tidy %>%
+  select(company, headquarter, industry, company_size, revenue) %>%
+  distinct(company, .keep_all = TRUE) %>% 
+  mutate(company_id = row_number())
+
+# Table B: Jobs (The Fact Table) 
+jobs_table <- job_posts_tidy %>%
+  left_join(companies, by = "company") %>%
+  select(job_id, job_title, salary_numeric, location, post_date_dt, company_id)
+
+# Table C/D: Skills & Bridge (Many-to-Many handling) 
+skills_long <- job_posts_tidy %>%
+  separate_rows(skills_clean, sep = ",\\s*") %>%
+  mutate(skill_name = str_to_lower(str_trim(skills_clean))) %>%
+  filter(skill_name != "")
+
+skills_lookup <- skills_long %>%
+  distinct(skill_name) %>%
+  mutate(skill_id = row_number())
+
+job_skills_bridge <- skills_long %>%
+  left_join(skills_lookup, by = "skill_name") %>%
+  select(job_id, skill_id)
+
+# Establish Database Connection and Load 
+con <- dbConnect(SQLite(), "ds_job_posts.db")
+dbWriteTable(con, "companies", companies, overwrite = TRUE)
+dbWriteTable(con, "jobs", jobs_table, overwrite = TRUE)
+dbWriteTable(con, "skills_lookup", skills_lookup, overwrite = TRUE)
+dbWriteTable(con, "job_skills_bridge", job_skills_bridge, overwrite = TRUE)
+```
+
+### Data Visualization:
+
+```{r}
+#| echo: true
+
+# Pulling the joined data from the database using a SQL Query 
+
+skill_valuation <- dbGetQuery(con, "
+  SELECT 
+    s.skill_name,
+    COUNT(j.job_id) AS demand_count,
+    AVG(j.salary_numeric) AS avg_salary
+  FROM job_skills_bridge b
+  JOIN jobs j ON b.job_id = j.job_id
+  JOIN skills_lookup s ON b.skill_id = s.skill_id
+  GROUP BY s.skill_name
+  HAVING demand_count > 5
+  ORDER BY avg_salary DESC
+")
+
+
+
+# Visualization in R
+ggplot(skill_valuation, aes(x = demand_count, y = avg_salary, label = skill_name)) +
+  geom_point(color = "darkgreen", size = 3, alpha = 0.7) +
+  geom_text(vjust = -1, check_overlap = TRUE, size = 3) +
+  scale_y_continuous(labels = dollar_format()) +
+  labs(title = "Data Science Skills: Value vs. Demand (2025)",
+       subtitle = "High-Value skills are at the top; High-Demand skills are to the right",
+       x = "Demand (Number of Job Postings)",
+       y = "Average Salary (Market Value)",
+       caption = "Source: Project 3 Normalized SQLite Database") +
+  theme_minimal()
+
+```
+
+```{r}
+#| echo: true
+#Statistical analysis 
+
+# Most Common Skills (Top 10)
+# query database for counts and filter out empty strings
+top_skills <- dbGetQuery(con, "
+  SELECT s.skill_name, COUNT(j.job_id) as demand
+  FROM job_skills_bridge b
+  JOIN skills_lookup s ON b.skill_id = s.skill_id
+  JOIN jobs j ON b.job_id = j.job_id
+  WHERE s.skill_name != ''
+  GROUP BY s.skill_name
+  ORDER BY demand DESC
+  LIMIT 10
+")
+
+ggplot(top_skills, aes(x = reorder(skill_name, demand), y = demand)) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Top 10 Most Common Data Science Skills (2025)",
+       x = "Skill", y = "Number of Job Postings") +
+  theme_minimal()
+
+# Skill -> Salary Correlation
+# average salary associated with the most frequent skills
+skill_salary_corr <- dbGetQuery(con, "
+  SELECT s.skill_name, AVG(j.salary_numeric) as avg_salary
+  FROM job_skills_bridge b
+  JOIN skills_lookup s ON b.skill_id = s.skill_id
+  JOIN jobs j ON b.job_id = j.job_id
+  WHERE s.skill_name IN (SELECT skill_name FROM (
+      SELECT skill_name, COUNT(*) as c FROM job_skills_bridge JOIN skills_lookup USING(skill_id) GROUP BY 1 ORDER BY c DESC LIMIT 15
+  ))
+  GROUP BY s.skill_name
+  ORDER BY avg_salary DESC
+")
+
+ggplot(skill_salary_corr, aes(x = reorder(skill_name, avg_salary), y = avg_salary)) +
+  geom_point(size = 4, color = "darkorange") +
+  scale_y_continuous(labels = scales::label_dollar()) +
+  coord_flip() +
+  labs(title = "Salary Correlation for Top 15 Skills",
+       subtitle = "Average salary associated with the most frequently requested skills",
+       x = "Skill", y = "Average Market Salary") +
+  theme_minimal()
+
+
+```
+## Conclusion -
+This project consisted of identifying a data source that highlighted jobs posted in 2025 that included "data scientist" or "machine learning" in the position title and included key words on the skills necessary to fulfill the job. Because of how robust the data set was, the team decided to gather the information tidy it and normalize it in a relational database. Once the distinct tables were created and the relationships identified, we were able to analyze further. The analysis successfully categorizes data science skills into distinct tiers based on their frequency in job postings (demand) and their financial return (value). Our findings show that based on demand, python coding is the most frequently requested data science skill with over 600 distinct job postings requiring it as a skill set. Python's popularity stems from a unique blend of simple, readable syntax and immense versatility across numerous domains.
+
+In terms of the data science skill with the most financial return, scala coding is the highest paying skill set. Scala, short for "Scalable Language," is a high-level, general-purpose programming language designed to integrate object-oriented and functional programming paradigms. In data science, Scala is primarily used for big data engineering, large-scale data processing, and distributed computing, largely due to its native support for Apache Spark.
+
+These findings are incredibly interesting because it showcases how the market is moving to employ individuals skilled in flexible coding language with a large financial investment in scalable language that can support big data. It represents a desire for the market to grow its data and generate meaningful insights from it. 
