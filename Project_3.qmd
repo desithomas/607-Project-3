@@ -7,11 +7,11 @@ editor: visual
 
 ## Approach -
 
-This project is meant to explore the question, "**Which data science skills are most valued?**" in a collaborative process with a group of our choosing. The goal is to work effectively as a team to perform an exploratory analysis to answer this question. Because we've had experience working together in a past assignment and noticed that we collaborate pretty well, we (*Desiree Thomas, Denise Atherley and Kiera Griffiths*) decided to work together for this Project as well. We plan to fulfill the various project requirements by breaking down each key deliverable.
+This project is meant to explore the question, "**Which data science skills were most valued in 2025?**" in a collaborative process with a group of our choosing. The goal is to work effectively as a team to perform an exploratory analysis to answer this question. Because we've had experience working together in a past assignment and noticed that we collaborate pretty well, we (*Desiree Thomas, Denise Atherley and Kiera Griffiths*) decided to work together for this Project as well. We plan to fulfill the various project requirements by breaking down each key deliverable.
 
 ### Collaboration:
 
-We will be using GitHub and Slack for our primary communication. GitHub will be the host for our shared repository and we will be using GitHub Projects to track issues, manage our workflow, assign tasks to specific members and track their completion. We will use Slack to coordinate meetings and Teams for video calls. GitHub issues may be used for handling bugs and errors. We have created a README.md for documentation as well.
+We will be using GitHub and Slack for our primary communication. GitHub will be the host for our shared repository and we will be using GitHub Projects to track issues, manage our workflow, assign tasks to specific members and track their completion. We will use Slack to coordinate meetings and Teams for video calls. GitHub issues may be used for handling bugs and errors. We have created a README.md for documentation as well and git for version control.
 
 ### Data Acquisition:
 
@@ -49,13 +49,13 @@ To design a normalized relational schema, we will breakdown the Data Science Job
 
     -   skill_id (Foreign Key -\> skills.skill_id)
 
-An Entity-Relationship (ER) diagram will be produced to document this design, illustrating how entities relate to one another. We can use resources such as draw.io, Excalidraw or Lucidchart.
+An Entity-Relationship (ER) diagram will be produced to document this design, illustrating how entities relate to one another. We used draw.io to produce this diagram.
 
 **How we will load the data:**
 
-We will load the .csv file into a database, most likely SQLite, and use SQL code to generate our structured tables with the appropriate primary keys so that we can link them.
+We will load the .csv file into a SQLite database, and use SQL code to generate our structured tables with the appropriate primary keys so that we can link them.
 
-Once the relational database is established, we can use the DBI, RSQLite and tidyverse libraries to perform all data tidying, transformations and exploratory data analysis in R. Hopefully, we can successfully store our database in the cloud which will allow our team to connect to it. We will pull only the data that we need for our analysis and address any data quality issues like missing data and outliers that deviate from the standard format.
+Once the relational database is established, we can use the DBI, RSQLite and tidyverse libraries to perform all data tidying, transformations and exploratory data analysis in R. We will pull only the data that we need for our analysis and address any data quality issues like missing data and outliers that deviate from the standard format.
 
 ### Analysis strategy:
 
@@ -69,7 +69,6 @@ In order to answer the question of which data science skills are most valued, we
 
 ```{r}
 
-#chunk 1 
 library(tidyverse)
 library(janitor)
 library(lubridate)
@@ -87,8 +86,6 @@ job_posts_raw <- read_csv(url) %>%
 
 ```{r}
 
-
-# meets the requirement to tidy the data using R
 job_posts_tidy <- job_posts_raw %>%
   # Create the ID first
   mutate(job_id = row_number()) %>% 
@@ -180,12 +177,12 @@ ggplot(skill_valuation, aes(x = demand_count, y = avg_salary, label = skill_name
 
 ```{r}
 #| echo: true
-#Statistical analysis 
 
 # Most Common Skills (Top 10)
 # query database for counts and filter out empty strings
 top_skills <- dbGetQuery(con, "
-  SELECT s.skill_name, COUNT(j.job_id) as demand
+  SELECT s.skill_name, COUNT(j.job_id) as demand,
+  CAST(COUNT(j.job_id) AS REAL) / (SELECT COUNT(job_id) FROM jobs) AS pct
   FROM job_skills_bridge b
   JOIN skills_lookup s ON b.skill_id = s.skill_id
   JOIN jobs j ON b.job_id = j.job_id
@@ -195,9 +192,15 @@ top_skills <- dbGetQuery(con, "
   LIMIT 10
 ")
 
-ggplot(top_skills, aes(x = reorder(skill_name, demand), y = demand)) +
+ggplot(top_skills, aes(x = reorder(skill_name, pct), y = pct)) +
   geom_col(fill = "steelblue") +
+  # Add percentage text labels at the end of the bars
+  geom_text(aes(label = scales::percent(pct, accuracy = 0.1)), 
+            hjust = -0.2, size = 3.5, color = "black") +
   coord_flip() +
+  # Format the axis to show percentages
+  scale_y_continuous(labels = scales::percent_format(), 
+                     expand = expansion(mult = c(0, 0.15))) + # Extra room for the text labels
   labs(title = "Top 10 Most Common Data Science Skills (2025)",
        x = "Skill", y = "Number of Job Postings") +
   theme_minimal()
@@ -225,11 +228,18 @@ ggplot(skill_salary_corr, aes(x = reorder(skill_name, avg_salary), y = avg_salar
        x = "Skill", y = "Average Market Salary") +
   theme_minimal()
 
-
+# Close the database connection
+dbDisconnect(con)
 ```
+
 ## Conclusion -
+
 This project consisted of identifying a data source that highlighted jobs posted in 2025 that included "data scientist" or "machine learning" in the position title and included key words on the skills necessary to fulfill the job. Because of how robust the data set was, the team decided to gather the information tidy it and normalize it in a relational database. Once the distinct tables were created and the relationships identified, we were able to analyze further. The analysis successfully categorizes data science skills into distinct tiers based on their frequency in job postings (demand) and their financial return (value). Our findings show that based on demand, python coding is the most frequently requested data science skill with over 600 distinct job postings requiring it as a skill set. Python's popularity stems from a unique blend of simple, readable syntax and immense versatility across numerous domains.
 
 In terms of the data science skill with the most financial return, scala coding is the highest paying skill set. Scala, short for "Scalable Language," is a high-level, general-purpose programming language designed to integrate object-oriented and functional programming paradigms. In data science, Scala is primarily used for big data engineering, large-scale data processing, and distributed computing, largely due to its native support for Apache Spark.
 
-These findings are incredibly interesting because it showcases how the market is moving to employ individuals skilled in flexible coding language with a large financial investment in scalable language that can support big data. It represents a desire for the market to grow its data and generate meaningful insights from it. 
+These findings are incredibly interesting because it showcases how the market is moving to employ individuals skilled in flexible coding language with a large financial investment in scalable language that can support big data. It represents a desire for the market to grow its data and generate meaningful insights from it.
+
+The assistance of and LLM was used to enhance code:
+
+*Google DeepMind. (2026). Gemini 3 Flash \[Large language model\]. https://gemini.google.com. Accessed March 16-23, 2026.*
